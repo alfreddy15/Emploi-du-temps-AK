@@ -1,0 +1,10 @@
+{
+  "name": "Emploi du temps L2 B IT",
+  "short_name": "EDT L2",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#1f4e9c",
+  "theme_color": "#1f4e9c",
+  "lang": "fr"
+}

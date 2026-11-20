@@ -1,0 +1,92 @@
+[
+  {
+    "date": "2026-11-16",
+    "debut": "08:00",
+    "fin": "12:00",
+    "matiere": "Mathématiques (Dénombrements et Probabilités)",
+    "intervenant": "DR AGBOKOU",
+    "seance": "7/8",
+    "type": "Cours"
+  },
+  {
+    "date": "2026-11-16",
+    "debut": "13:00",
+    "fin": "17:00",
+    "matiere": "Initiation à la Recherche Opérationnelle",
+    "intervenant": "DR TCHAZINO",
+    "seance": "6/8",
+    "type": "Cours"
+  },
+  {
+    "date": "2026-11-17",
+    "debut": "08:00",
+    "fin": "12:00",
+    "matiere": "Initiation à la Recherche Opérationnelle (FIN)",
+    "intervenant": "DR TCHAZINO",
+    "seance": "8/8",
+    "type": "Cours"
+  },
+  {
+    "date": "2026-11-17",
+    "debut": "13:00",
+    "fin": "17:00",
+    "matiere": "Mathématiques (Dénombrements et Probabilités) (FIN)",
+    "intervenant": "DR AGBOKOU",
+    "seance": "8/8",
+    "type": "Cours"
+  },
+  {
+    "date": "2026-11-18",
+    "debut": "08:00",
+    "fin": "12:00",
+    "matiere": "UI / UX Responsive Design",
+    "intervenant": "M ATIKOSSIE",
+    "seance": "4/6",
+    "type": "Cours"
+  },
+  {
+    "date": "2026-11-18",
+    "debut": "14:00",
+    "fin": "16:00",
+    "matiere": "Contrôle Continu : Initiation à la Recherche Opérationnelle",
+    "intervenant": "DR TCHAZINO",
+    "seance": "1/1",
+    "type": "Contrôle"
+  },
+  {
+    "date": "2026-11-19",
+    "debut": "08:00",
+    "fin": "12:00",
+    "matiere": "UI / UX Responsive Design",
+    "intervenant": "M ATIKOSSIE",
+    "seance": "5/6",
+    "type": "Cours"
+  },
+  {
+    "date": "2026-11-19",
+    "debut": "13:00",
+    "fin": "17:00",
+    "matiere": "Administration et maintenance Windows Server 1",
+    "intervenant": "M BOUKLINAM",
+    "seance": "1/6",
+    "type": "Cours"
+  },
+  {
+    "date": "2026-11-20",
+    "debut": "08:00",
+    "fin": "12:00",
+    "matiere": "UI / UX Responsive Design (FIN)",
+    "intervenant": "M ATIKOSSIE",
+    "seance": "6/6",
+    "type": "Cours"
+  },
+  {
+    "date": "2026-11-20",
+    "debut": "13:00",
+    "fin": "17:00",
+    "matiere": "TPE",
+    "intervenant": "",
+    "seance": "",
+    "type": "TPE"
+  }
+]

@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f4e9c">
+<link rel="manifest" href="manifest.json">
+<title>Emploi du temps L2 B IT</title>
+<style>
+  :root{
+    --bg:#f3f4f6; --carte:#ffffff; --txt:#111; --doux:#555; --bleu:#1f4e9c;
+    --cours:#e3eeff; --ctrl:#ffe3c2; --tpe:#d6f5df; --tp:#efe3ff; --bord:#d0d5dd; --auj:#e07b00;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#111418; --carte:#1b2027; --txt:#eef1f5; --doux:#a7b0bd; --bleu:#6ea0ff;
+      --cours:#1d2c47; --ctrl:#4a3414; --tpe:#16392a; --tp:#33224d; --bord:#2c333d; --auj:#ff9a2e;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:0 0 env(safe-area-inset-bottom);
+       font-family:system-ui,sans-serif;background:var(--bg);color:var(--txt)}
+  header{position:sticky;top:0;z-index:5;background:#1f4e9c;color:#fff;
+         padding:calc(10px + env(safe-area-inset-top)) 12px 10px}
+  .haut{display:flex;align-items:center;gap:8px;margin:0 0 8px}
+  header h1{margin:0;font-size:1.05rem;flex:1}
+  header button, .btn-import{border:0;border-radius:8px;padding:8px 12px;font-size:.95rem;
+         background:#ffffff26;color:#fff;cursor:pointer}
+  .btn-import{background:#fff;color:#1f4e9c;font-weight:600;padding:7px 10px;font-size:.85rem}
+  nav{display:flex;align-items:center;gap:8px}
+  nav .titre{flex:1;text-align:center;font-weight:600;font-size:.95rem}
+  main{padding:10px 10px 24px;max-width:720px;margin:0 auto}
+  .jour{background:var(--carte);border:1px solid var(--bord);border-radius:12px;margin:0 0 10px;overflow:hidden}
+  .jour.auj{border:2px solid var(--auj)}
+  .jour h2{margin:0;padding:8px 12px;font-size:.95rem;background:#1f4e9c;color:#fff}
+  .jour.auj h2{background:var(--auj);color:#111}
+  .periodes{display:grid;grid-template-columns:1fr 1fr}
+  .case{padding:8px 10px;min-height:92px;font-size:.86rem;border-top:1px solid var(--bord)}
+  .case + .case{border-left:1px solid var(--bord)}
+  .case .p{font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;color:var(--doux);margin-bottom:4px}
+  .case.cours{background:var(--cours)} .case.ctrl{background:var(--ctrl)}
+  .case.tpe{background:var(--tpe)} .case.tp{background:var(--tp)}
+  .case .h{font-weight:700} .case .m{margin:2px 0} .case .i{color:var(--doux);font-size:.8rem}
+  .case hr{border:0;border-top:1px solid var(--bord);margin:6px 0}
+  .vide{color:var(--doux);font-style:italic}
+  .semaine-vide{background:var(--carte);border:1px dashed var(--bord);border-radius:12px;padding:22px 16px;
+                text-align:center;color:var(--doux);line-height:1.5}
+  .semaine-vide b{display:block;color:var(--txt);font-size:1.05rem;margin-bottom:6px}
+  footer{padding:0 12px 24px;text-align:center;color:var(--doux);font-size:.75rem;line-height:1.6}
+  footer a{color:var(--bleu);text-decoration:underline;cursor:pointer}
+  #toast{position:fixed;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:9;
+         max-width:520px;margin:0 auto;padding:12px 14px;border-radius:10px;background:#16a34a;color:#fff;
+         font-size:.9rem;display:none;box-shadow:0 4px 14px #0004}
+  #toast.err{background:#c62828}
+</style>
+</head>
+<body>
+<header>
+  <div class="haut">
+    <h1>📅 Emploi du temps L2 B IT</h1>
+    <button class="btn-import" id="btn-import">📄 Importer mon EDT</button>
+    <input type="file" id="fichier" accept="application/pdf,.pdf" hidden>
+  </div>
+  <nav>
+    <button id="prec" aria-label="Semaine précédente">◀</button>
+    <div class="titre" id="titre"></div>
+    <button id="auj">Auj.</button>
+    <button id="suiv" aria-label="Semaine suivante">▶</button>
+  </nav>
+</header>
+<main id="liste"></main>
+<footer id="pied"></footer>
+<div id="toast"></div>
+
+<script src="edt-pdf.js"></script>
+<script>
+const JOURS = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"];
+const CLASSES = {"Cours":"cours","Contrôle":"ctrl","TPE":"tpe","TP":"tp"};
+const PDFJS = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+
+let partage = [];                 // emploi du temps publié sur le site (emploi_du_temps.json)
+let local = lireLocal();          // PDF importés sur CET appareil : {seances:[], periodes:[[debut,fin]]}
+let seances = [];
+let manuel = false;               // true si l'utilisateur a navigué lui-même
+let lundi = lundiDe(new Date());
+
+/* ---------- dates ---------- */
+function lundiDe(d){
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+  return x;
+}
+function iso(d){
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function dateIso(s){ return new Date(s + "T00:00:00"); }
+function esc(t){
+  return String(t).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+}
+
+/* ---------- semaine affichée par défaut ----------
+   La semaine « se réinitialise » après la dernière séance de la semaine
+   (au plus tôt vendredi 17h) : on passe alors automatiquement à la semaine suivante. */
+function finDeSemaine(l){
+  let fin = new Date(l.getFullYear(), l.getMonth(), l.getDate() + 4, 17, 0, 0);
+  const a = iso(l), b = iso(new Date(l.getFullYear(), l.getMonth(), l.getDate() + 6));
+  for (const e of seances){
+    if (e.date >= a && e.date <= b){
+      const [h, m] = e.fin.split(":");
+      const d = dateIso(e.date); d.setHours(+h, +m, 0, 0);
+      if (d > fin) fin = d;
+    }
+  }
+  return fin;
+}
+function semaineParDefaut(){
+  const maintenant = new Date();
+  const l = lundiDe(maintenant);
+  if (maintenant > finDeSemaine(l)) l.setDate(l.getDate() + 7);
+  return l;
+}
+
+/* ---------- données ---------- */
+function lireLocal(){
+  try{
+    const v = JSON.parse(localStorage.getItem("edt_local") || "null");
+    if (v && Array.isArray(v.seances) && Array.isArray(v.periodes)) return v;
+  }catch(e){}
+  return {seances: [], periodes: []};
+}
+function sauverLocal(){
+  try{ localStorage.setItem("edt_local", JSON.stringify(local)); }catch(e){}
+}
+function fusion(){
+  const garde = partage.filter(e => !local.periodes.some(p => e.date >= p[0] && e.date <= p[1]));
+  seances = garde.concat(local.seances).sort((a, b) => (a.date + a.debut).localeCompare(b.date + b.debut));
+}
+
+/* ---------- affichage ---------- */
+function carte(e){
+  const infos = [e.intervenant, e.seance].filter(Boolean).join(" · ");
+  return `<div class="h">${esc(e.debut)} – ${esc(e.fin)}</div>
+          <div class="m">${esc(e.matiere)}</div>` +
+         (infos ? `<div class="i">${esc(infos)}</div>` : "");
+}
+function dessiner(){
+  const jours = [...Array(6)].map((_, i) => { const d = new Date(lundi); d.setDate(d.getDate()+i); return d; });
+  const f = d => String(d.getDate()).padStart(2,"0")+"/"+String(d.getMonth()+1).padStart(2,"0");
+  document.getElementById("titre").textContent = "Semaine du " + f(jours[0]) + " au " + f(jours[5]);
+  const aujourdhui = iso(new Date());
+
+  const debut = iso(jours[0]), fin = iso(new Date(lundi.getFullYear(), lundi.getMonth(), lundi.getDate()+6));
+  const total = seances.filter(e => e.date >= debut && e.date <= fin).length;
+  if (!total){
+    document.getElementById("liste").innerHTML =
+      `<div class="semaine-vide"><b>Pas encore d'emploi du temps pour cette semaine</b>
+       Dès que l'école publie le PDF, il apparaîtra ici. Tu peux aussi l'importer toi-même avec le bouton « 📄 Importer mon EDT ».</div>`;
+    return;
+  }
+
+  let html = "";
+  for (const d of jours){
+    const du = seances.filter(e => e.date === iso(d));
+    if (!du.length && d.getDay() === 6) continue;          // samedi vide : on le masque
+    const matin = du.filter(e => e.debut < "12:30");
+    const aprem = du.filter(e => e.debut >= "12:30");
+    const cellule = (nom, items) => {
+      if (!items.length) return `<div class="case"><div class="p">${nom}</div><div class="vide">—</div></div>`;
+      const cl = CLASSES[items[0].type] || "cours";
+      return `<div class="case ${cl}"><div class="p">${nom}</div>${items.map(carte).join("<hr>")}</div>`;
+    };
+    html += `<section class="jour ${iso(d) === aujourdhui ? "auj" : ""}" id="j-${iso(d)}">
+      <h2>${JOURS[(d.getDay()+6)%7]} ${f(d)}</h2>
+      <div class="periodes">${cellule("Matin", matin)}${cellule("Après-midi", aprem)}</div></section>`;
+  }
+  document.getElementById("liste").innerHTML = html;
+  const auj = document.querySelector(".jour.auj");
+  if (auj) auj.scrollIntoView({block:"center"});
+}
+function pied(source){
+  const n = local.seances.length;
+  document.getElementById("pied").innerHTML =
+    seances.length + " séance(s) · données " + source +
+    (n ? `<br>dont ${n} importée(s) sur cet appareil · <a id="raz">Supprimer mes imports</a>` : "");
+  const raz = document.getElementById("raz");
+  if (raz) raz.onclick = () => {
+    local = {seances: [], periodes: []}; sauverLocal(); fusion();
+    pied(source); dessiner(); message("Imports supprimés.");
+  };
+}
+function message(texte, erreur){
+  const t = document.getElementById("toast");
+  t.textContent = texte; t.className = erreur ? "err" : ""; t.style.display = "block";
+  clearTimeout(message.h); message.h = setTimeout(() => t.style.display = "none", erreur ? 9000 : 4500);
+}
+
+/* ---------- navigation ---------- */
+function bouger(n){ manuel = true; lundi.setDate(lundi.getDate()+n); dessiner(); }
+document.getElementById("prec").onclick = () => bouger(-7);
+document.getElementById("suiv").onclick = () => bouger(7);
+document.getElementById("auj").onclick = () => { manuel = false; lundi = semaineParDefaut(); dessiner(); };
+
+/* Si la page reste ouverte, elle passe toute seule à la nouvelle semaine le vendredi soir. */
+function verifierSemaine(){
+  if (manuel) return;
+  const l = semaineParDefaut();
+  if (iso(l) !== iso(lundi)){ lundi = l; dessiner(); }
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) verifierSemaine(); });
+setInterval(verifierSemaine, 60000);
+
+/* ---------- import d'un PDF ---------- */
+function chargerScript(src){
+  return new Promise((ok, ko) => {
+    const s = document.createElement("script");
+    s.src = src; s.onload = ok; s.onerror = () => ko(new Error("Impossible de charger le lecteur PDF (connexion ?)."));
+    document.head.appendChild(s);
+  });
+}
+async function preparerPdfJs(){
+  if (!window.pdfjsLib) await chargerScript(PDFJS + "pdf.min.js");
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + "pdf.worker.min.js";
+}
+document.getElementById("btn-import").onclick = () => document.getElementById("fichier").click();
+document.getElementById("fichier").onchange = async ev => {
+  const fichier = ev.target.files[0];
+  ev.target.value = "";
+  if (!fichier) return;
+  message("Lecture du PDF…");
+  try{
+    await preparerPdfJs();
+    const r = await EDT_PDF.lireFichier(fichier);
+    local.seances = local.seances.filter(e => !(e.date >= r.periode[0] && e.date <= r.periode[1])).concat(r.seances);
+    local.periodes = local.periodes.filter(p => !(p[0] <= r.periode[1] && p[1] >= r.periode[0])).concat([r.periode]);
+    sauverLocal(); fusion();
+    manuel = true;
+    lundi = lundiDe(dateIso(r.periode[0]));
+    pied(document.getElementById("pied").dataset.source || "en ligne");
+    dessiner();
+    message(r.seances.length + " séance(s) importée(s) pour la semaine du " +
+            r.periode[0].split("-").reverse().join("/") + " au " + r.periode[1].split("-").reverse().join("/") + ".");
+  }catch(e){
+    message(e.message || "Ce PDF n'a pas pu être lu.", true);
+  }
+};
+
+/* ---------- démarrage ---------- */
+async function charger(){
+  let source = "en ligne";
+  try{
+    const r = await fetch("emploi_du_temps.json?t=" + Date.now(), {cache:"no-store"});
+    if (!r.ok) throw new Error(r.status);
+    partage = await r.json();
+    try{ localStorage.setItem("edt", JSON.stringify(partage)); }catch(e){}
+  }catch(e){
+    try{ partage = JSON.parse(localStorage.getItem("edt") || "[]"); source = "hors ligne"; }catch(_){ partage = []; }
+  }
+  document.getElementById("pied").dataset.source = source;
+  fusion();
+  lundi = semaineParDefaut();
+  pied(source);
+  dessiner();
+}
+charger();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+</script>
+</body>
+</html>
