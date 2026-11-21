@@ -234,8 +234,22 @@ function chargerScript(src){
   });
 }
 async function preparerPdfJs(){
-  if (!window.pdfjsLib) await chargerScript(PDFJS + "pdf.min.js");
-  window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + "pdf.worker.min.js";
+  if (window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions.workerSrc) return;
+  // 1) lecteur hébergé dans le dépôt (dossier lib), 2) sinon copie sur internet
+  const sources = ["lib/", "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/"];
+  let derniere = null;
+  for (const base of sources){
+    try{
+      if (!window.pdfjsLib) await chargerScript(base + "pdf.min.js");
+      if (base === "lib/"){                       // le « worker » doit exister lui aussi
+        const r = await fetch(base + "pdf.worker.min.js", {method: "HEAD"});
+        if (!r.ok) throw new Error("worker absent");
+      }
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = base + "pdf.worker.min.js";
+      return;
+    }catch(e){ derniere = e; }
+  }
+  throw derniere || new Error("Impossible de charger le lecteur PDF (connexion ?).");
 }
 document.getElementById("btn-import").onclick = () => document.getElementById("fichier").click();
 async function importerFichier(fichier){
