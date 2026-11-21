@@ -1,5 +1,5 @@
 // Copie hors ligne + réception d'un PDF partagé depuis une autre appli (WhatsApp, Fichiers...).
-const CACHE = "edt-v3";
+const CACHE = "edt-v5";
 const PARTAGE = "edt-partage";
 const FICHIERS = ["./", "index.html", "edt-pdf.js", "manifest.json",
                   "lib/pdf.min.js", "lib/pdf.worker.min.js"];
