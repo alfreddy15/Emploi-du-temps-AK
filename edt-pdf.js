@@ -64,6 +64,17 @@
               .filter(Boolean);
   }
 
+  /* Nom de la classe, lu au-dessus du tableau : « LICENCE 2 (L2) B IT » -> « L2 B IT ». */
+  function nomClasse(items, headerY) {
+    const lns = lignes(items.filter(i => i.y < headerY - 20));
+    for (const l of lns) {
+      const m = /\((L\d|M\d|B\d)\)\s*(.+)$/i.exec(l);
+      if (m) return `${m[1]} ${m[2]}`.replace(/\s+/g, " ").trim().toUpperCase();
+    }
+    for (const l of lns) if (/^(licence|master|bachelor|classe|fili[eè]re)\b/i.test(l)) return l.trim();
+    return null;
+  }
+
   function lireCellule(lns, debut, fin) {
     let seance = "";
     for (const l of lns) {
@@ -152,14 +163,15 @@
         if (s) seances.push({date: c.iso, ...s});
       }
     }
-    return {seances, dates: cols.map(c => c.iso)};
+    return {seances, dates: cols.map(c => c.iso), classe: nomClasse(items, headerY)};
   }
 
   /* pages : tableau de tableaux d'items. Retourne {seances, periode:[debut, fin]}. */
   function lirePages(pages) {
-    let seances = [], dates = [];
+    let seances = [], dates = [], classe = null;
     for (const items of pages) {
       const r = lirePage(items);
+      classe = classe || r.classe || null;
       seances = seances.concat(r.seances);
       dates = dates.concat(r.dates);
     }
@@ -168,7 +180,7 @@
     }
     dates.sort();
     seances.sort((a, b) => (a.date + a.debut).localeCompare(b.date + b.debut));
-    return {seances, periode: [dates[0], dates[dates.length - 1]]};
+    return {seances, periode: [dates[0], dates[dates.length - 1]], classe};
   }
 
   /* Navigateur : lit un fichier PDF avec pdf.js (pdfjsLib doit être chargé). */

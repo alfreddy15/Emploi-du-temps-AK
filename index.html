@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1f4e9c">
 <link rel="manifest" href="manifest.json">
-<title>Emploi du temps L2 B IT</title>
+<title>Emploi du temps</title>
 <style>
   :root{
     --bg:#f3f4f6; --carte:#ffffff; --txt:#111; --doux:#555; --bleu:#1f4e9c;
@@ -57,7 +57,7 @@
 <body>
 <header>
   <div class="haut">
-    <h1>📅 Emploi du temps L2 B IT</h1>
+    <h1 id="nom">📅 Emploi du temps</h1>
     <button class="btn-import" id="btn-import">📄 Importer mon EDT</button>
     <input type="file" id="fichier" accept="application/pdf,.pdf" hidden>
   </div>
@@ -76,8 +76,9 @@
 <script>
 const JOURS = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"];
 const CLASSES = {"Cours":"cours","Contrôle":"ctrl","TPE":"tpe","TP":"tp"};
-const PDFJS = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+const PDFJS = "lib/";                 // lecteur PDF hébergé dans le dépôt (plus rapide, marche hors ligne)
 
+let classeSite = "L2 B IT";        // classe de l'emploi du temps publié sur le site (meta.json)
 let partage = [];                 // emploi du temps publié sur le site (emploi_du_temps.json)
 let local = lireLocal();          // PDF importés sur CET appareil : {seances:[], periodes:[[debut,fin]]}
 let seances = [];
@@ -131,9 +132,23 @@ function lireLocal(){
 function sauverLocal(){
   try{ localStorage.setItem("edt_local", JSON.stringify(local)); }catch(e){}
 }
+const norm = t => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/\s+/g, " ").trim();
+/* Vrai si l'utilisateur a importé le PDF d'une AUTRE classe que celle du site. */
+function autreClasse(){ return !!local.classe && norm(local.classe) !== norm(classeSite); }
+function nomAffiche(){ return autreClasse() ? local.classe : classeSite; }
+function majNom(){
+  const n = nomAffiche();
+  document.getElementById("nom").textContent = "📅 Emploi du temps " + n;
+  document.title = "Emploi du temps " + n;
+}
 function fusion(){
+  const tri = (a, b) => (a.date + a.debut).localeCompare(b.date + b.debut);
+  if (autreClasse()){                  // autre classe : on n'affiche que SES cours, jamais ceux du site
+    seances = local.seances.slice().sort(tri);
+    return;
+  }
   const garde = partage.filter(e => !local.periodes.some(p => e.date >= p[0] && e.date <= p[1]));
-  seances = garde.concat(local.seances).sort((a, b) => (a.date + a.debut).localeCompare(b.date + b.debut));
+  seances = garde.concat(local.seances).sort(tri);
 }
 
 /* ---------- affichage ---------- */
@@ -181,11 +196,12 @@ function pied(source){
   const n = local.seances.length;
   document.getElementById("pied").innerHTML =
     seances.length + " séance(s) · données " + source +
-    (n ? `<br>dont ${n} importée(s) sur cet appareil · <a id="raz">Supprimer mes imports</a>` : "");
+    (n ? `<br>${autreClasse() ? "importé(es) depuis ton PDF (" + esc(local.classe) + ")" : "dont " + n + " importée(s) sur cet appareil"} · <a id="raz">${autreClasse() ? "Revenir à " + esc(classeSite) : "Supprimer mes imports"}</a>` : "");
   const raz = document.getElementById("raz");
   if (raz) raz.onclick = () => {
     local = {seances: [], periodes: []}; sauverLocal(); fusion();
-    pied(source); dessiner(); message("Imports supprimés.");
+    manuel = false; lundi = semaineParDefaut();
+    majNom(); pied(source); dessiner(); message("Imports supprimés.");
   };
 }
 function message(texte, erreur){
@@ -222,19 +238,30 @@ async function preparerPdfJs(){
   window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + "pdf.worker.min.js";
 }
 document.getElementById("btn-import").onclick = () => document.getElementById("fichier").click();
-document.getElementById("fichier").onchange = async ev => {
-  const fichier = ev.target.files[0];
-  ev.target.value = "";
-  if (!fichier) return;
+async function importerFichier(fichier){
   message("Lecture du PDF…");
   try{
     await preparerPdfJs();
     const r = await EDT_PDF.lireFichier(fichier);
+
+    // Le PDF est-il d'une autre classe que celle du site ?
+    const courante = autreClasse() ? local.classe : null;
+    const autre = r.classe ? norm(r.classe) !== norm(classeSite) : !!courante;
+    const nom = r.classe || courante;
+    if (autre){
+      if (!courante || norm(courante) !== norm(nom)) local = {seances: [], periodes: []};   // on ne mélange pas deux classes
+      local.classe = nom;
+    }else{
+      if (courante) local = {seances: [], periodes: []};
+      local.classe = null;
+    }
+
     local.seances = local.seances.filter(e => !(e.date >= r.periode[0] && e.date <= r.periode[1])).concat(r.seances);
     local.periodes = local.periodes.filter(p => !(p[0] <= r.periode[1] && p[1] >= r.periode[0])).concat([r.periode]);
     sauverLocal(); fusion();
     manuel = true;
     lundi = lundiDe(dateIso(r.periode[0]));
+    majNom();
     pied(document.getElementById("pied").dataset.source || "en ligne");
     dessiner();
     message(r.seances.length + " séance(s) importée(s) pour la semaine du " +
@@ -242,7 +269,26 @@ document.getElementById("fichier").onchange = async ev => {
   }catch(e){
     message(e.message || "Ce PDF n'a pas pu être lu.", true);
   }
+}
+document.getElementById("fichier").onchange = ev => {
+  const fichier = ev.target.files[0];
+  ev.target.value = "";
+  if (fichier) importerFichier(fichier);
 };
+
+/* PDF reçu via « Partager → EDT » (le service worker l'a mis de côté) */
+async function importerPartage(){
+  try{
+    const c = await caches.open("edt-partage");
+    const rep = await c.match("fichier-partage");
+    if (!rep){ message("Aucun PDF reçu. Réessaie le partage.", true); return; }
+    const blob = await rep.blob();
+    await c.delete("fichier-partage");
+    await importerFichier(new File([blob], "edt.pdf", {type: "application/pdf"}));
+  }catch(e){
+    message("Le PDF partagé n'a pas pu être ouvert.", true);
+  }
+}
 
 /* ---------- démarrage ---------- */
 async function charger(){
@@ -255,11 +301,20 @@ async function charger(){
   }catch(e){
     try{ partage = JSON.parse(localStorage.getItem("edt") || "[]"); source = "hors ligne"; }catch(_){ partage = []; }
   }
+  try{                                              // nom de la classe du site (facultatif)
+    const m = await (await fetch("meta.json?t=" + Date.now(), {cache:"no-store"})).json();
+    if (m && m.classe) classeSite = m.classe;
+  }catch(e){}
   document.getElementById("pied").dataset.source = source;
   fusion();
   lundi = semaineParDefaut();
+  majNom();
   pied(source);
   dessiner();
+  if (location.search.includes("partage=1")){
+    history.replaceState(null, "", location.pathname);
+    importerPartage();
+  }
 }
 charger();
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
