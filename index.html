@@ -44,6 +44,8 @@
   .semaine-vide{background:var(--carte);border:1px dashed var(--bord);border-radius:12px;padding:22px 16px;
                 text-align:center;color:var(--doux);line-height:1.5}
   .semaine-vide b{display:block;color:var(--txt);font-size:1.05rem;margin-bottom:6px}
+  .notice{background:#FFF3D6;border:1px solid #E0A100;border-radius:10px;padding:10px 12px;margin:0 0 10px;font-size:.85rem;line-height:1.4;color:#1B1B1B}
+  .semaine-vide button{margin-top:12px;border:0;border-radius:8px;min-height:44px;padding:0 14px;background:var(--bleu);color:#fff;font-family:inherit;font-size:.9rem;cursor:pointer}
   footer{padding:0 12px 24px;text-align:center;color:var(--doux);font-size:.75rem;line-height:1.6}
   footer a{color:var(--bleu);text-decoration:underline;cursor:pointer}
   #toast{position:fixed;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:9;
@@ -80,6 +82,7 @@ let classeSite = "L2 B IT";        // classe de l'emploi du temps publié sur le
 let partage = [];                 // emploi du temps publié sur le site (emploi_du_temps.json)
 let local = lireLocal();          // PDF importés sur CET appareil : {seances:[], periodes:[[debut,fin]]}
 let seances = [];
+let notice = "";                  // bandeau d'information affiché au-dessus de la semaine
 let manuel = false;               // true si l'utilisateur a navigué lui-même
 let lundi = lundiDe(new Date());
 
@@ -117,6 +120,31 @@ function semaineParDefaut(){
   const l = lundiDe(maintenant);
   if (maintenant > finDeSemaine(l)) l.setDate(l.getDate() + 7);
   return l;
+}
+
+const jm = d => String(d.getDate()).padStart(2,"0") + "/" + String(d.getMonth()+1).padStart(2,"0");
+function nbSeances(l){
+  const a = iso(l), b = iso(new Date(l.getFullYear(), l.getMonth(), l.getDate() + 6));
+  return seances.filter(e => e.date >= a && e.date <= b).length;
+}
+/* Semaine montrée à l'ouverture : celle de maintenant ; si elle est vide mais que tu as importé
+   un PDF sur cet appareil, on montre ce dernier PDF (avec un petit message) au lieu d'une page vide. */
+function semaineDemarrage(){
+  const l = semaineParDefaut();
+  notice = "";
+  if (!nbSeances(l) && local.seances.length){
+    const dernier = local.seances.map(e => e.date).sort().pop();
+    notice = "Pas encore d'emploi du temps pour la semaine du " + jm(l) + ". Voici le dernier que tu as importé.";
+    return lundiDe(dateIso(dernier));
+  }
+  return l;
+}
+/* Dernière semaine ayant des cours avant `ref` (sinon la première après). */
+function derniereSemaine(ref){
+  const dates = seances.map(e => e.date).sort();
+  const avant = dates.filter(d => d < iso(ref));
+  const d = avant.length ? avant[avant.length - 1] : dates[0];
+  return d ? lundiDe(dateIso(d)) : null;
 }
 
 /* ---------- données ---------- */
@@ -167,11 +195,17 @@ function dessiner(){
   if (!total){
     document.getElementById("liste").innerHTML =
       `<div class="semaine-vide"><b>Pas encore d'emploi du temps pour cette semaine</b>
-       Dès que l'école publie le PDF, il apparaîtra ici. Tu peux aussi l'importer toi-même avec le bouton « 📄 Importer mon EDT ».</div>`;
+       Dès que l'école publie le PDF, il apparaîtra ici. Tu peux aussi l'importer toi-même avec le bouton « 📄 Importer mon EDT ».
+       ${seances.length ? '<br><button id="derniere">Voir la dernière semaine enregistrée</button>' : ""}</div>`;
+    const bt = document.getElementById("derniere");
+    if (bt) bt.onclick = () => {
+      const l = derniereSemaine(lundi);
+      if (l){ manuel = true; notice = ""; lundi = l; dessiner(); }
+    };
     return;
   }
 
-  let html = "";
+  let html = notice ? `<div class="notice">${esc(notice)}</div>` : "";
   for (const d of jours){
     const du = seances.filter(e => e.date === iso(d));
     if (!du.length && d.getDay() === 6) continue;          // samedi vide : on le masque
@@ -198,7 +232,7 @@ function pied(source){
   const raz = document.getElementById("raz");
   if (raz) raz.onclick = () => {
     local = {seances: [], periodes: []}; sauverLocal(); fusion();
-    manuel = false; lundi = semaineParDefaut();
+    manuel = false; lundi = semaineDemarrage();
     majNom(); pied(source); dessiner(); message("Imports supprimés.");
   };
 }
@@ -209,15 +243,15 @@ function message(texte, erreur){
 }
 
 /* ---------- navigation ---------- */
-function bouger(n){ manuel = true; lundi.setDate(lundi.getDate()+n); dessiner(); }
+function bouger(n){ manuel = true; notice = ""; lundi.setDate(lundi.getDate()+n); dessiner(); }
 document.getElementById("prec").onclick = () => bouger(-7);
 document.getElementById("suiv").onclick = () => bouger(7);
-document.getElementById("auj").onclick = () => { manuel = false; lundi = semaineParDefaut(); dessiner(); };
+document.getElementById("auj").onclick = () => { manuel = false; lundi = semaineDemarrage(); dessiner(); };
 
 /* Si la page reste ouverte, elle passe toute seule à la nouvelle semaine le vendredi soir. */
 function verifierSemaine(){
   if (manuel) return;
-  const l = semaineParDefaut();
+  const l = semaineDemarrage();
   if (iso(l) !== iso(lundi)){ lundi = l; dessiner(); }
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden) verifierSemaine(); });
@@ -271,7 +305,7 @@ async function importerFichier(fichier){
     local.seances = local.seances.filter(e => !(e.date >= r.periode[0] && e.date <= r.periode[1])).concat(r.seances);
     local.periodes = local.periodes.filter(p => !(p[0] <= r.periode[1] && p[1] >= r.periode[0])).concat([r.periode]);
     sauverLocal(); fusion();
-    manuel = true;
+    manuel = true; notice = "";
     lundi = lundiDe(dateIso(r.periode[0]));
     majNom();
     pied(document.getElementById("pied").dataset.source || "en ligne");
@@ -304,6 +338,7 @@ async function importerPartage(){
 
 /* ---------- démarrage ---------- */
 async function charger(){
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   let source = "en ligne";
   try{
     const r = await fetch("emploi_du_temps.json?t=" + Date.now(), {cache:"no-store"});
@@ -319,7 +354,7 @@ async function charger(){
   }catch(e){}
   document.getElementById("pied").dataset.source = source;
   fusion();
-  lundi = semaineParDefaut();
+  lundi = semaineDemarrage();
   majNom();
   pied(source);
   dessiner();
